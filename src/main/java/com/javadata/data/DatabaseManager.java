@@ -53,10 +53,23 @@ public class DatabaseManager {
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(createUsersTable);
             stmt.execute(createDatasetsTable);
+        } catch (SQLException e) {
+            System.err.println("Error creating users table: " + e.getMessage());
+            throw e; // Rethrow to handle it in the calling method
         }
     }
 
     public Connection getConnection() {
         return connection;
+    }
+
+    public void closeConnection() {
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
     }
 } 
