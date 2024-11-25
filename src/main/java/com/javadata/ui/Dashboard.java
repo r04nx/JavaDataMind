@@ -5,6 +5,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import javax.swing.ImageIcon;
+import javax.swing.Box;
 
 public class Dashboard extends JFrame {
 
@@ -31,11 +33,14 @@ public class Dashboard extends JFrame {
 
         // Add navigation panel for user to switch between sections
         JPanel navigationPanel = new JPanel();
-        JButton datasourceBtn = new JButton("Datasources");
-        JButton settingsBtn = new JButton("Settings");
-        JButton visualizerBtn = new JButton("Visualizer");
-        JButton helpBtn = new JButton("Help/About");
-        JButton logoutBtn = new JButton("Logout");
+        navigationPanel.setLayout(new BoxLayout(navigationPanel, BoxLayout.X_AXIS));
+        
+        // Create buttons with icons
+        JButton datasourceBtn = createButtonWithIcon("Datasources", "/icons/datasource.png");
+        JButton settingsBtn = createButtonWithIcon("Settings", "/icons/settings.png");
+        JButton visualizerBtn = createButtonWithIcon("Visualizer", "/icons/visualizer.png");
+        JButton helpBtn = createButtonWithIcon("Help/About", "/icons/help.png");
+        JButton logoutBtn = createButtonWithIcon("Logout", "/icons/logout.png");
 
         // Action listeners for buttons
         datasourceBtn.addActionListener(e -> cardLayout.show(mainPanel, "Datasources"));
@@ -56,15 +61,23 @@ public class Dashboard extends JFrame {
             }
         });
 
+        // Add components with spacing
+        navigationPanel.add(Box.createHorizontalStrut(10));
         navigationPanel.add(datasourceBtn);
+        navigationPanel.add(Box.createHorizontalStrut(10));
         navigationPanel.add(settingsBtn);
+        navigationPanel.add(Box.createHorizontalStrut(10));
         navigationPanel.add(visualizerBtn);
+        navigationPanel.add(Box.createHorizontalStrut(10));
         navigationPanel.add(helpBtn);
-        navigationPanel.add(logoutBtn); // Add the logout button
-
+        navigationPanel.add(Box.createHorizontalStrut(10));
+        navigationPanel.add(logoutBtn);
+        navigationPanel.add(Box.createHorizontalGlue());  // Push user label to the right
+        
         JLabel userLabel = new JLabel("Logged in as: " + user.getName());
         userLabel.setForeground(Color.WHITE);
         navigationPanel.add(userLabel);
+        navigationPanel.add(Box.createHorizontalStrut(10));
 
         // Style the navigation panel
         navigationPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -86,5 +99,21 @@ public class Dashboard extends JFrame {
 
         // Add padding to main panel
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+    }
+
+    private JButton createButtonWithIcon(String text, String iconPath) {
+        JButton button = new JButton(text);
+        try {
+            ImageIcon icon = new ImageIcon(getClass().getResource(iconPath));
+            // Resize icon to appropriate size (e.g., 16x16 pixels)
+            Image img = icon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH);
+            button.setIcon(new ImageIcon(img));
+            button.setIconTextGap(8); // Space between icon and text
+        } catch (Exception e) {
+            System.err.println("Could not load icon: " + iconPath);
+        }
+        button.setPreferredSize(new Dimension(120, 30));
+        button.setFocusPainted(false);
+        return button;
     }
 }
