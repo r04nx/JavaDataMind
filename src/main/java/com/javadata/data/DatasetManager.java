@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class DatasetManager {
     private static DatasetManager instance;
@@ -47,31 +49,40 @@ public class DatasetManager {
 
     public void addDataset(Dataset dataset, File file) throws SQLException {
         if (file == null || !file.exists()) {
-            throw new IllegalArgumentException("File must exist.");
+            throw new IllegalArgumentException("Invalid file");
         }
         
-        String filePath = null;
-        try {
-            // Copy file to data directory
-            Path destination = Paths.get(DATA_DIR, dataset.getName() + "_" + file.getName());
-            Files.copy(file.toPath(), destination, StandardCopyOption.REPLACE_EXISTING);
-            filePath = destination.toString();
-        } catch (IOException e) {
-            System.err.println("Error copying file: " + e.getMessage());
-            throw new RuntimeException("File operation failed", e); // Wrap and rethrow as a runtime exception
+        // Validate file type
+        String fileName = file.getName().toLowerCase();
+        if (!fileName.endsWith(".csv")) {
+            throw new IllegalArgumentException("Only CSV files are supported");
+        }
+        
+        // Validate file size (e.g., max 10MB)
+        if (file.length() > 10_000_000) {
+            throw new IllegalArgumentException("File size exceeds maximum limit");
         }
 
+        // Copy file with unique name
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String newFileName = dataset.getName() + "_" + timestamp + ".csv";
+        Path destination = Paths.get(DATA_DIR, newFileName);
+        
+        try {
+            Files.copy(file.toPath(), destination, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to copy dataset file", e);
+        }
+
+        // Save to database
         String sql = "INSERT INTO datasets (name, type, color, uploaded_by, file_path) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement pstmt = dbManager.getConnection().prepareStatement(sql)) {
             pstmt.setString(1, dataset.getName());
             pstmt.setString(2, dataset.getType());
             pstmt.setString(3, dataset.getColor());
             pstmt.setString(4, dataset.getUploadedBy());
-            pstmt.setString(5, filePath);
+            pstmt.setString(5, destination.toString());
             pstmt.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("Error adding dataset to database: " + e.getMessage());
-            throw e; // Rethrow to handle it in the calling method
         }
     }
 

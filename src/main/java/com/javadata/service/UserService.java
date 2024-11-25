@@ -27,7 +27,6 @@ public class UserService {
         try (PreparedStatement pstmt = dbManager.getConnection().prepareStatement(sql)) {
             pstmt.setString(1, username);
             pstmt.setString(2, password);
-            
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 return new UserProfile(

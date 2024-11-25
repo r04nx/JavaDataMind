@@ -18,6 +18,12 @@ import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.data.category.DefaultCategoryDataset;
+import org.jfree.data.time.*;
+import org.jfree.data.xy.*;
+import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
 
 public class VisualizerPanel extends JPanel {
     private final JComboBox<String> datasetComboBox;
@@ -136,65 +142,221 @@ public class VisualizerPanel extends JPanel {
     }
 
     private void visualizeColumns(List<String> selectedColumns) {
-        DefaultCategoryDataset dataset = new DefaultCategoryDataset();
-        List<String[]> data = datasetManager.getDatasetContent((String) datasetComboBox.getSelectedItem());
-
-        // Determine the X-axis column
-        xAxisColumn = (String) JOptionPane.showInputDialog(this, "Select X-axis column:", "X-axis Selection",
-                JOptionPane.QUESTION_MESSAGE, null, selectedColumns.toArray(), selectedColumns.get(0));
-
-        if (xAxisColumn == null) {
-            return; // User canceled the selection
+        String datasetName = (String) datasetComboBox.getSelectedItem();
+        List<String[]> data = datasetManager.getDatasetContent(datasetName);
+        
+        // First, determine column types
+        Map<String, String> columnTypes = new HashMap<>();
+        for (String column : selectedColumns) {
+            columnTypes.put(column, determineColumnType(data, column));
+        }
+        
+        // Let user select X-axis column with type information
+        String[] options = selectedColumns.stream()
+            .map(col -> col + " (" + columnTypes.get(col) + ")")
+            .toArray(String[]::new);
+        
+        String selection = (String) JOptionPane.showInputDialog(
+            this,
+            "Select X-axis column:",
+            "X-axis Selection",
+            JOptionPane.QUESTION_MESSAGE,
+            null,
+            options,
+            options[0]
+        );
+        
+        if (selection == null) return;
+        
+        xAxisColumn = selection.substring(0, selection.indexOf(" ("));
+        String xAxisType = columnTypes.get(xAxisColumn);
+        
+        // Remove x-axis column from available Y-axis columns
+        List<String> yAxisColumns = selectedColumns.stream()
+            .filter(col -> !col.equals(xAxisColumn))
+            .collect(Collectors.toList());
+        
+        if (yAxisColumns.isEmpty()) {
+            showError("Please select at least one column for Y-axis");
+            return;
         }
 
-        for (String column : selectedColumns) {
-            if (column.equals(xAxisColumn)) continue; // Skip the X-axis column
-            int columnIndex = datasetManager.selectedColumnIndex(column, (String) datasetComboBox.getSelectedItem());
-            for (int i = 1; i < data.size(); i++) { // Skip header
+        // Create appropriate dataset based on X-axis type
+        switch (xAxisType) {
+            case "Date/Time" -> createTimeSeriesChart(data, xAxisColumn, yAxisColumns);
+            case "Numeric" -> createNumericChart(data, xAxisColumn, yAxisColumns);
+            case "Text" -> createCategoryChart(data, xAxisColumn, yAxisColumns);
+            default -> showError("Unsupported X-axis type");
+        }
+    }
+
+    private String determineColumnType(List<String[]> data, String columnName) {
+        int colIndex = getColumnIndex(columnName, data);
+        if (colIndex == -1) return "Unknown";
+        
+        // Check first few non-header rows
+        for (int i = 1; i < Math.min(data.size(), 10); i++) {
+            String value = data.get(i)[colIndex].trim();
+            if (value.isEmpty()) continue;
+            
+            // Try parsing as date
+            if (isDateValue(value)) return "Date/Time";
+            
+            // Try parsing as number
+            if (isNumeric(value)) return "Numeric";
+        }
+        
+        return "Text";
+    }
+
+    private boolean isDateValue(String value) {
+        String[] datePatterns = {
+            "yyyy-MM-dd", "MM/dd/yyyy", "dd-MM-yyyy",
+            "yyyy-MM-dd HH:mm:ss", "MM/dd/yyyy HH:mm:ss"
+        };
+        
+        for (String pattern : datePatterns) {
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat(pattern);
+                sdf.setLenient(false);
+                sdf.parse(value);
+                return true;
+            } catch (ParseException ignored) {}
+        }
+        return false;
+    }
+
+    private void createTimeSeriesChart(List<String[]> data, String xColumn, List<String> yColumns) {
+        TimeSeriesCollection dataset = new TimeSeriesCollection();
+        int xColIndex = getColumnIndex(xColumn, data);
+        
+        for (String yColumn : yColumns) {
+            TimeSeries series = new TimeSeries(yColumn);
+            int yColIndex = getColumnIndex(yColumn, data);
+            
+            for (int i = 1; i < data.size(); i++) {
                 String[] row = data.get(i);
-                if (isNumeric(row[columnIndex])) {
-                    dataset.addValue(Double.parseDouble(row[columnIndex]), column, row[getColumnIndex(xAxisColumn, data)]);
-                }
+                try {
+                    Date date = new SimpleDateFormat("yyyy-MM-dd").parse(row[xColIndex]);
+                    double value = Double.parseDouble(row[yColIndex]);
+                    series.add(new Day(date), value);
+                } catch (ParseException | NumberFormatException ignored) {}
+            }
+            dataset.addSeries(series);
+        }
+        
+        JFreeChart chart = ChartFactory.createTimeSeriesChart(
+            "Time Series Analysis",
+            xColumn,
+            "Values",
+            dataset,
+            true,
+            true,
+            false
+        );
+        
+        displayChartInNewWindow(chart);
+    }
+
+    private void createNumericChart(List<String[]> data, String xColumn, List<String> yColumns) {
+        XYSeriesCollection dataset = new XYSeriesCollection();
+        int xColIndex = getColumnIndex(xColumn, data);
+        
+        for (String yColumn : yColumns) {
+            XYSeries series = new XYSeries(yColumn);
+            int yColIndex = getColumnIndex(yColumn, data);
+            
+            for (int i = 1; i < data.size(); i++) {
+                String[] row = data.get(i);
+                try {
+                    double x = Double.parseDouble(row[xColIndex]);
+                    double y = Double.parseDouble(row[yColIndex]);
+                    series.add(x, y);
+                } catch (NumberFormatException ignored) {}
+            }
+            dataset.addSeries(series);
+        }
+        
+        String chartType = (String) visualizationTypeComboBox.getSelectedItem();
+        JFreeChart chart = switch (chartType) {
+            case "Scatter Plot" -> ChartFactory.createScatterPlot(
+                "Scatter Plot", xColumn, "Values", dataset
+            );
+            default -> ChartFactory.createXYLineChart(
+                "Numeric Analysis", xColumn, "Values", dataset
+            );
+        };
+        
+        displayChartInNewWindow(chart);
+    }
+
+    private void createCategoryChart(List<String[]> data, String xColumn, List<String> yColumns) {
+        DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+        int xColIndex = getColumnIndex(xColumn, data);
+        
+        for (String yColumn : yColumns) {
+            int yColIndex = getColumnIndex(yColumn, data);
+            
+            // Group data by categories
+            Map<String, List<Double>> categoryValues = new HashMap<>();
+            for (int i = 1; i < data.size(); i++) {
+                String[] row = data.get(i);
+                String category = row[xColIndex];
+                try {
+                    double value = Double.parseDouble(row[yColIndex]);
+                    categoryValues.computeIfAbsent(category, k -> new ArrayList<>()).add(value);
+                } catch (NumberFormatException ignored) {}
+            }
+            
+            // Calculate averages for each category
+            for (Map.Entry<String, List<Double>> entry : categoryValues.entrySet()) {
+                double average = entry.getValue().stream()
+                    .mapToDouble(Double::doubleValue)
+                    .average()
+                    .orElse(0.0);
+                dataset.addValue(average, yColumn, entry.getKey());
             }
         }
-
-        // Create and display the chart in a new window
-        JFreeChart chart = createChart(dataset);
+        
+        String chartType = (String) visualizationTypeComboBox.getSelectedItem();
+        JFreeChart chart = switch (chartType) {
+            case "Bar Chart" -> ChartFactory.createBarChart(
+                "Category Analysis", xColumn, "Values", dataset,
+                PlotOrientation.VERTICAL, true, true, false
+            );
+            case "Line Chart" -> ChartFactory.createLineChart(
+                "Category Analysis", xColumn, "Values", dataset,
+                PlotOrientation.VERTICAL, true, true, false
+            );
+            case "Area Chart" -> ChartFactory.createAreaChart(
+                "Category Analysis", xColumn, "Values", dataset,
+                PlotOrientation.VERTICAL, true, true, false
+            );
+            case "Stacked Bar Chart" -> ChartFactory.createStackedBarChart(
+                "Category Analysis", xColumn, "Values", dataset,
+                PlotOrientation.VERTICAL, true, true, false
+            );
+            default -> ChartFactory.createBarChart(
+                "Category Analysis", xColumn, "Values", dataset,
+                PlotOrientation.VERTICAL, true, true, false
+            );
+        };
+        
         displayChartInNewWindow(chart);
     }
 
     private JFreeChart createChart(DefaultCategoryDataset dataset) {
         String chartType = (String) visualizationTypeComboBox.getSelectedItem();
-        PlotOrientation orientation = PlotOrientation.VERTICAL; // Default orientation
+        String title = "Data Visualization";
+        PlotOrientation orientation = PlotOrientation.VERTICAL;
 
-        switch (chartType) {
-            case "Bar Chart":
-                return ChartFactory.createBarChart("Visualization", xAxisColumn, "Value", dataset, orientation, true, true, false);
-            case "Line Chart":
-                return ChartFactory.createLineChart("Visualization", xAxisColumn, "Value", dataset, orientation, true, true, false);
-            case "Pie Chart":
-                // Implement pie chart logic if needed
-                break;
-            case "Area Chart":
-                // Implement area chart logic if needed
-                break;
-            case "Scatter Plot":
-                // Implement scatter plot logic if needed
-                break;
-            case "Histogram":
-                // Implement histogram logic if needed
-                break;
-            case "Stacked Bar Chart":
-                // Implement stacked bar chart logic if needed
-                break;
-            case "Grouped Bar Chart":
-                // Implement grouped bar chart logic if needed
-                break;
-            case "Time Series":
-                // Implement time series logic if needed
-                break;
-        }
-        return null; // Return null if no chart is created
+        return switch (chartType) {
+            case "Bar Chart" -> ChartFactory.createBarChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            case "Line Chart" -> ChartFactory.createLineChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            case "Area Chart" -> ChartFactory.createAreaChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            case "Stacked Bar Chart" -> ChartFactory.createStackedBarChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            default -> ChartFactory.createBarChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+        };
     }
 
     private void displayChartInNewWindow(JFreeChart chart) {

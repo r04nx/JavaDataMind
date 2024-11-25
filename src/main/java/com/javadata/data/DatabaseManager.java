@@ -11,7 +11,7 @@ public class DatabaseManager {
         initializeDatabase();
     }
 
-    public static DatabaseManager getInstance() {
+    public static synchronized DatabaseManager getInstance() {
         if (instance == null) {
             instance = new DatabaseManager();
         }
@@ -20,10 +20,12 @@ public class DatabaseManager {
 
     private void initializeDatabase() {
         try {
+            Class.forName("org.sqlite.JDBC");
             connection = DriverManager.getConnection(DB_URL);
+            connection.setAutoCommit(true);
             createTables();
-        } catch (SQLException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize database", e);
         }
     }
 
@@ -59,8 +61,15 @@ public class DatabaseManager {
         }
     }
 
-    public Connection getConnection() {
-        return connection;
+    public synchronized Connection getConnection() {
+        try {
+            if (connection == null || connection.isClosed()) {
+                initializeDatabase();
+            }
+            return connection;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get database connection", e);
+        }
     }
 
     public void closeConnection() {

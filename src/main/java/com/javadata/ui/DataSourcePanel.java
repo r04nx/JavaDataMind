@@ -21,6 +21,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.ChartPanel;
+import org.jfree.data.category.DefaultCategoryDataset;
+import org.jfree.chart.plot.PlotOrientation;
+
 public class DataSourcePanel extends JPanel {
     private final JTable datasetsTable;
     private final DefaultTableModel tableModel;
@@ -36,6 +42,9 @@ public class DataSourcePanel extends JPanel {
     private static final String SAVE_EMOJI = "💾";
     private static final String FILE_EMOJI = "📁";
     private JTextField searchField;
+    private JComboBox<String> datasetComboBox;
+    private String xAxisColumn;
+    private JComboBox<String> visualizationTypeComboBox;
 
     public DataSourcePanel(UserProfile user) {
         this.currentUser = user;
@@ -119,6 +128,10 @@ public class DataSourcePanel extends JPanel {
         actionColumn.setCellRenderer(new ActionButtonRenderer());
         actionColumn.setCellEditor(new ActionButtonEditor());
         actionColumn.setPreferredWidth(80);
+
+        visualizationTypeComboBox = new JComboBox<>(new String[]{
+            "Bar Chart", "Line Chart", "Area Chart", "Stacked Bar Chart"
+        });
     }
 
     private JButton createStyledButton(String text, String iconName) {
@@ -485,18 +498,80 @@ public class DataSourcePanel extends JPanel {
     }
 
     private void visualizeColumns(List<String> selectedColumns) {
-        // Example logic to visualize selected columns
-        if (selectedColumns.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "No columns selected for visualization.", "Warning", JOptionPane.WARNING_MESSAGE);
-            return;
+        DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+        List<String[]> data = datasetManager.getDatasetContent((String) datasetComboBox.getSelectedItem());
+
+        // Determine the X-axis column
+        xAxisColumn = (String) JOptionPane.showInputDialog(this, "Select X-axis column:", "X-axis Selection",
+                JOptionPane.QUESTION_MESSAGE, null, selectedColumns.toArray(), selectedColumns.get(0));
+
+        if (xAxisColumn == null) {
+            return; // User canceled the selection
         }
 
-        // Create a new visualization panel or dialog
-        // This is just a placeholder for your actual visualization logic
-        StringBuilder message = new StringBuilder("Visualizing the following columns:\n");
         for (String column : selectedColumns) {
-            message.append(column).append("\n");
+            if (column.equals(xAxisColumn)) continue; // Skip the X-axis column
+            int columnIndex = datasetManager.selectedColumnIndex(column, (String) datasetComboBox.getSelectedItem());
+            if (columnIndex == -1) {
+                showError("Column '" + column + "' not found.");
+                return; // Exit if the column is not found
+            }
+            for (int i = 1; i < data.size(); i++) { // Skip header
+                String[] row = data.get(i);
+                if (isNumeric(row[columnIndex])) {
+                    dataset.addValue(Double.parseDouble(row[columnIndex]), column, row[getColumnIndex(xAxisColumn, data)]);
+                }
+            }
         }
-        JOptionPane.showMessageDialog(this, message.toString(), "Visualization", JOptionPane.INFORMATION_MESSAGE);
+
+        // Create and display the chart in a new window
+        JFreeChart chart = createChart(dataset);
+        displayChartInNewWindow(chart);
+    }
+
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private boolean isNumeric(String str) {
+        try {
+            Double.parseDouble(str);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private int getColumnIndex(String columnName, List<String[]> data) {
+        String[] headers = data.get(0);
+        for (int i = 0; i < headers.length; i++) {
+            if (headers[i].equals(columnName)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private JFreeChart createChart(DefaultCategoryDataset dataset) {
+        String chartType = (String) visualizationTypeComboBox.getSelectedItem();
+        String title = "Data Visualization";
+        PlotOrientation orientation = PlotOrientation.VERTICAL;
+
+        return switch (chartType) {
+            case "Bar Chart" -> ChartFactory.createBarChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            case "Line Chart" -> ChartFactory.createLineChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            case "Area Chart" -> ChartFactory.createAreaChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            case "Stacked Bar Chart" -> ChartFactory.createStackedBarChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+            default -> ChartFactory.createBarChart(title, xAxisColumn, "Value", dataset, orientation, true, true, false);
+        };
+    }
+
+    private void displayChartInNewWindow(JFreeChart chart) {
+        JFrame chartFrame = new JFrame("Chart Visualization");
+        chartFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        chartFrame.setSize(800, 600);
+        ChartPanel chartPanel = new ChartPanel(chart);
+        chartFrame.add(chartPanel, BorderLayout.CENTER);
+        chartFrame.setVisible(true);
     }
 }
