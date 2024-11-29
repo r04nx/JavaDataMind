@@ -28,6 +28,8 @@ public class DatasetManager {
     private static final String DELETE_EMOJI = "🗑️";
     private static final String SAVE_EMOJI = "💾";
 
+    private List<Dataset> datasets = new ArrayList<>();
+
     private DatasetManager() {
         dbManager = DatabaseManager.getInstance();
         createDataDirectory();
@@ -254,5 +256,12 @@ public class DatasetManager {
         
         // Optionally, you can log or process the updated datasets
         System.out.println("Datasets refreshed. Total datasets: " + updatedDatasets.size());
+    }
+
+    public Dataset getDataset(String datasetName) {
+        return datasets.stream()
+            .filter(dataset -> dataset.getName().equals(datasetName))
+            .findFirst()
+            .orElse(null);
     }
 }

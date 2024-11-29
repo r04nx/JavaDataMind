@@ -8,6 +8,14 @@ import javax.swing.*;
 
 public class Main {
     public static void main(String[] args) {
+        // Show splash screen
+        JWindow splash = new JWindow();
+        JLabel splashLabel = new JLabel(new ImageIcon("resources/bg_white.png"));
+        splash.getContentPane().add(splashLabel);
+        splash.pack();
+        splash.setLocationRelativeTo(null);
+        splash.setVisible(true);
+
         try {
             UIManager.setLookAndFeel(new FlatDarkLaf());
         } catch (UnsupportedLookAndFeelException e) {

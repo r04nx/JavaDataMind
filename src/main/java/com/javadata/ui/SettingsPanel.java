@@ -3,6 +3,7 @@ package com.javadata.ui;
 import com.javadata.data.DatabaseManager;
 import com.javadata.model.UserProfile;
 import com.javadata.service.UserService;
+import com.javadata.ui.theme.Theme;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -119,10 +120,7 @@ public class SettingsPanel extends JPanel {
 
     private JButton createStyledButton(String text) {
         JButton button = new JButton(text);
-        button.setBackground(new Color(70, 120, 180));
-        button.setForeground(Color.WHITE);
-        button.setFocusPainted(false);
-        button.setBorder(BorderFactory.createEmptyBorder(8, 15, 8, 15));
+        Theme.styleButton(button, Theme.PRIMARY_COLOR, Color.WHITE);
         return button;
     }
 
